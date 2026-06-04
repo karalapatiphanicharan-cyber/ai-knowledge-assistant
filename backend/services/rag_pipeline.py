@@ -2,97 +2,67 @@ import logging
 import re
 import time
 from services.embedding import generate_embeddings, generate_single_embedding
-from services.vector_db import add_vectors, search, get_stats, get_document_preview
+from services.vector_db import add_vectors, search, get_stats, get_document_preview, _chunks
 from services.llm import generate_answer, generate_summary, suggest_questions
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
-SIMILARITY_THRESHOLD = 0.9 # Optimized for production precision
+SIMILARITY_THRESHOLD = 0.85 # Slightly stricter
 
-def _clean_text(text: str) -> str:
-    """Normalize whitespace and remove junk characters."""
-    text = re.sub(r'[\r\n]+', '\n', text)
-    text = re.sub(r'[ \t]+', ' ', text)
-    return text.strip()
+def _is_summary_request(text: str) -> bool:
+    """Detect if the user is asking for a summary."""
+    patterns = [r'\bsummarize\b', r'\bsummary\b', r'\boverview\b', r'\bkey points\b', r'\bmain takeaways\b']
+    return any(re.search(p, text.lower()) for p in patterns)
 
 def ingest_document(text: str, source: str = "unknown") -> int:
-    """
-    Process a document: Clean -> Chunk -> Embed -> Store.
-    """
     start_time = time.time()
-    clean_content = _clean_text(text)
-    if not clean_content:
-        return 0
+    clean_content = re.sub(r'[\r\n]+', '\n', text)
+    clean_content = re.sub(r'[ \t]+', ' ', clean_content).strip()
 
-    # Improved chunking with overlap
+    if not clean_content: return 0
+
     chunks = []
     for i in range(0, len(clean_content), CHUNK_SIZE - CHUNK_OVERLAP):
         chunk = clean_content[i:i + CHUNK_SIZE].strip()
-        if chunk:
-            chunks.append(chunk)
+        if chunk: chunks.append(chunk)
 
-    if not chunks:
-        return 0
+    if not chunks: return 0
 
-    logger.info(f"[RAG] Ingesting '{source}': {len(chunks)} chunks created.")
-    
     embeddings = generate_embeddings(chunks)
-    metadata = [
-        {
-            "content": chunk, 
-            "source": source, 
-            "index": i,
-            "char_count": len(chunk)
-        } for i, chunk in enumerate(chunks)
-    ]
+    metadata = [{
+        "content": chunk,
+        "source": source,
+        "index": i,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+    } for i, chunk in enumerate(chunks)]
     
     add_vectors(embeddings, metadata)
-    logger.info(f"[RAG] Ingestion completed in {time.time() - start_time:.2f}s")
     return len(chunks)
 
-def query_knowledge_base(question: str, top_k: int = 5) -> dict:
-    """
-    Query the knowledge base with strict similarity filtering and ranking.
-    """
-    start_time = time.time()
-    logger.info(f"[RAG] Query: {question}")
-    
+def query_knowledge_base(question: str, top_k: int = 6) -> dict:
+    """Enhanced query with summary detection and multi-chunk synthesis."""
+    if _is_summary_request(question) and _chunks:
+        return {
+            "answer": "Generating document summary...",
+            "is_summary": True,
+            "summary_data": get_doc_summary(),
+            "sources": [],
+            "confidence": "High"
+        }
+
     try:
         query_embedding = generate_single_embedding(question)
         results = search(query_embedding, top_k=top_k)
 
         if not results:
-            return {
-                "answer": "Information not found in uploaded documents.",
-                "sources": [],
-                "confidence": "Low"
-            }
+            return {"answer": "Information not found in uploaded documents.", "sources": [], "confidence": "Low"}
 
-        # 1. Similarity Filtering & Logging
-        filtered_results = []
-        best_score = 10.0
-        for r in results:
-            score = r["score"]
-            best_score = min(best_score, score)
-            if score <= SIMILARITY_THRESHOLD:
-                filtered_results.append(r)
-                logger.info(f"[RAG] Selected chunk (score: {score:.4f}) from {r['source']}")
-            else:
-                logger.info(f"[RAG] Filtered out chunk (score: {score:.4f}) from {r['source']}")
-
+        filtered_results = [r for r in results if r["score"] <= SIMILARITY_THRESHOLD]
         if not filtered_results:
-            return {
-                "answer": "Information not found in uploaded documents.",
-                "sources": [],
-                "confidence": "Low"
-            }
+            return {"answer": "Information not found in uploaded documents.", "sources": [], "confidence": "Low"}
 
-        # 2. Ranking & Deduplication
         filtered_results.sort(key=lambda x: x["score"])
 
         unique_contents = []
@@ -105,64 +75,50 @@ def query_knowledge_base(question: str, top_k: int = 5) -> dict:
                 unique_contents.append(r["content"])
                 seen.add(r["content"])
 
-            fname = r["source"]
-            if fname not in seen_files:
-                snippet = r["content"][:150].replace('\n', ' ').strip() + "..."
+            if r["source"] not in seen_files:
                 sources.append({
-                    "file": fname,
-                    "snippet": snippet,
+                    "file": r["source"],
                     "score": round(r["score"], 4),
                     "chunk_id": r.get("index", 0)
                 })
-                seen_files.add(fname)
+                seen_files.add(r["source"])
 
-        # Build context
-        context = "\n---\n".join(unique_contents)
-        context = context[:1200]
-
-        # 3. Grounded Generation
+        context = "\n---\n".join(unique_contents)[:2000]
         answer = generate_answer(question, context)
 
-        # Confidence calculation
-        confidence = "High" if best_score < 0.6 else "Medium" if best_score < 0.85 else "Low"
+        best_score = filtered_results[0]["score"]
+        confidence = "High" if best_score < 0.5 else "Medium" if best_score < 0.75 else "Low"
 
-        logger.info(f"[RAG] Query completed in {time.time() - start_time:.2f}s")
         return {
             "answer": answer,
             "sources": sources,
             "confidence": confidence
         }
-
     except Exception as e:
-        logger.error(f"[RAG] Error during query: {e}")
-        return {
-            "answer": "I encountered an error while searching your documents.",
-            "sources": [],
-            "confidence": "Low"
-        }
+        logger.error(f"Query error: {e}")
+        return {"answer": "Error searching documents.", "sources": [], "confidence": "Low"}
+
+def search_snippets(query: str, top_k: int = 5) -> list:
+    """Direct snippet search for the sidebar search feature."""
+    if not _chunks: return []
+    query_embedding = generate_single_embedding(query)
+    results = search(query_embedding, top_k=top_k)
+    return [{
+        "source": r["source"],
+        "snippet": r["content"][:150] + "...",
+        "score": round(r["score"], 4)
+    } for r in results if r["score"] < 1.0]
 
 def get_doc_summary(source_name: str = None) -> dict:
-    """Generate summary and stats for documents."""
-    from services.vector_db import _chunks
+    relevant_chunks = [c for c in _chunks if c["source"] == source_name] if source_name else _chunks
+    if not relevant_chunks: return {"error": "No documents found."}
 
-    if source_name:
-        doc_chunks = [c for c in _chunks if c["source"] == source_name]
-    else:
-        doc_chunks = _chunks
-
-    if not doc_chunks:
-        return {"error": "No documents found."}
-
-    context = "\n".join(c["content"] for c in doc_chunks[:5])
-    summary = generate_summary(context)
+    context = "\n".join(c["content"] for c in relevant_chunks[:8])
+    summary_obj = generate_summary(context)
     stats = get_stats()
 
-    # Simple topic extraction logic
-    topics = list(set(re.findall(r'\b[A-Z][a-z]{3,}\b', context)))[:5]
-
     return {
-        "summary": summary,
-        "topics": topics,
+        **summary_obj,
         "stats": stats,
         "suggestions": suggest_questions(context)
     }
