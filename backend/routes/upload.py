@@ -8,36 +8,31 @@ router = APIRouter()
 
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    ext = file.filename.rsplit(".", 1)[-1].lower()
-    contents = await file.read()
-    size_kb = round(len(contents) / 1024, 2)
-
     try:
+        ext = file.filename.rsplit(".", 1)[-1].lower()
+        contents = await file.read()
+        size_kb = round(len(contents) / 1024, 2)
         text = extract_text(contents, ext)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Failed to extract text: {exc}")
 
-    if not text.strip():
-        raise HTTPException(status_code=422, detail="No extractable text.")
+        if not text.strip():
+            raise ValueError("No extractable text.")
 
-    safe_name = sanitize_filename(file.filename)
-    if safe_name in get_unique_sources():
-         raise HTTPException(status_code=400, detail="Document already exists.")
+        safe_name = sanitize_filename(file.filename)
+        if safe_name in get_unique_sources():
+             raise ValueError("Document already exists.")
 
-    num_chunks = ingest_document(text, source=safe_name)
-
-    # Add size info to metadata (hacky since ingest_document adds vectors)
-    # Better would be to update vector_db.py but I'll stick to current structure
-    for chunk in _chunks:
-        if chunk["source"] == safe_name:
-            chunk["size_kb"] = size_kb
-
-    return {"status": "success", "filename": safe_name, "chunks_stored": num_chunks}
+        num_chunks = ingest_document(text, source=safe_name)
+        for chunk in _chunks:
+            if chunk["source"] == safe_name:
+                chunk["size_kb"] = size_kb
+        return {"status": "success", "filename": safe_name, "chunks_stored": num_chunks}
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 @router.post("/clear")
 async def clear_knowledge_base():
     clear_index()
-    return {"status": "success"}
+    return {"status": "success", "message": "Knowledge base cleared."}
 
 @router.get("/documents")
 async def list_documents():
@@ -46,29 +41,33 @@ async def list_documents():
     for chunk in _chunks:
         if chunk["source"] not in seen:
             docs_metadata.append({
+                "id": chunk["source"],
                 "name": chunk["source"],
                 "size_kb": chunk.get("size_kb", 0),
-                "timestamp": chunk.get("timestamp", "Unknown")
+                "timestamp": chunk.get("timestamp", "Unknown"),
+                "chunk_count": len([c for c in _chunks if c["source"] == chunk["source"]])
             })
             seen.add(chunk["source"])
     return {"documents": docs_metadata}
 
-@router.delete("/documents/{filename}")
+@router.delete("/document/{filename}")
 async def delete_document(filename: str):
     if remove_document(filename):
-        return {"status": "success"}
-    raise HTTPException(status_code=404, detail="Not found")
+        return {"status": "success", "message": f"Document {filename} deleted."}
+    raise HTTPException(status_code=404, detail="Document not found.")
 
 @router.get("/stats")
 async def fetch_stats():
     return get_stats()
 
-@router.get("/documents/{filename}/preview")
+@router.get("/document/{filename}/preview")
 async def preview_doc(filename: str):
     preview = get_document_preview(filename)
-    if not preview: raise HTTPException(status_code=404)
+    if not preview: raise HTTPException(status_code=404, detail="Preview unavailable.")
     return preview
 
-@router.get("/summary")
-async def doc_summary(filename: str = None):
-    return get_doc_summary(filename)
+@router.get("/document/{filename}/summary")
+async def doc_summary(filename: str):
+    summary = get_doc_summary(filename)
+    if "error" in summary: raise HTTPException(status_code=404, detail=summary["error"])
+    return summary

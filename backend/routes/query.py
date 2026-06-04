@@ -28,19 +28,20 @@ async def query_documents(payload: QueryRequest):
         return QueryResponse(**result)
     except Exception as e:
         return QueryResponse(
-            answer="Error searching documents.",
+            answer="Information not found in uploaded documents.",
             sources=[],
             confidence="Low"
         )
 
-@router.get("/search-snippets")
-async def search_docs(q: str):
-    return {"results": search_snippets(q)}
-
-@router.get("/system-status")
+@router.get("/status")
 async def system_status():
     return {
+        "status": "Online",
         "backend": "Online",
         "embedding_model": "Loaded" if generator is not None else "Error",
         "vector_db": "Ready" if _index is not None else "Initializing"
     }
+
+@router.get("/search-snippets")
+async def search_docs(q: str):
+    return {"results": search_snippets(q)}

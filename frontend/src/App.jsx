@@ -32,7 +32,7 @@ export default function App() {
       setDocuments(docsData.documents || [])
       setStats(statsData)
       checkStatus()
-    } catch (err) { console.error(err) }
+    } catch (err) { console.error("Data refresh failed", err) }
   }
 
   const checkStatus = async () => {
@@ -51,10 +51,10 @@ export default function App() {
 
     try {
       const data = await queryDocuments(question)
-      const aiMsg = { id: msgIdCounter++, role: 'ai', content: data }
-      setMessages(prev => [...prev, aiMsg])
+      // Check if it's a summary or normal answer
+      setMessages(prev => [...prev, { id: msgIdCounter++, role: 'ai', content: data }])
     } catch (err) {
-      setMessages(prev => [...prev, { id: msgIdCounter++, role: 'ai', content: "Network error. Please verify backend." }])
+      setMessages(prev => [...prev, { id: msgIdCounter++, role: 'ai', content: "Error: " + err.message }])
     } finally { setIsTyping(false) }
   }
 
@@ -63,29 +63,55 @@ export default function App() {
     try {
       await uploadDocument(file)
       await refreshData()
-      const sum = await getSummary(file.name)
+      const sum = const safe_name = data.filename; await getSummary(safe_name)
       setMessages(prev => [...prev, {
         id: msgIdCounter++,
         role: 'ai',
-        content: { summary_data: sum, confidence: 'High', answer: "Summary for " + file.name }
+        content: { summary_data: sum, confidence: 'High', answer: "Summary for " + safe_name }
       }])
-    } catch (err) { alert(err.message) }
+    } catch (err) { alert("Upload failed: " + err.message) }
     finally { setIsTyping(false) }
   }
 
   const handleClear = async () => {
-    if (!confirm("Clear everything?")) return
-    await clearKnowledgeBase()
-    setMessages([])
-    setHistory([])
-    refreshData()
+    if (!confirm("Clear knowledge base?")) return
+    try {
+        await clearKnowledgeBase()
+        setMessages([])
+        setHistory([])
+        await refreshData()
+    } catch (err) { alert("Clear failed: " + err.message) }
   }
 
   const handleExport = () => {
-    const text = messages.map(m => `[${m.role.toUpperCase()}] ${typeof m.content === 'object' ? (m.content.answer || 'Summary') : m.content}`).join('\n\n')
+    const text = messages.map(m => `[${m.role.toUpperCase()}] ${typeof m.content === 'object' ? (m.content.answer || 'Summary Data') : m.content}`).join('\n\n')
     const blob = new Blob([text], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'chat_export.txt'; a.click()
+  }
+
+  const handleDocDelete = async (name) => {
+      if (!confirm(`Delete ${name}?`)) return
+      try {
+          await deleteDocument(name)
+          await refreshData()
+      } catch (err) { alert("Delete failed: " + err.message) }
+  }
+
+  const handleDocSummary = async (name) => {
+      setIsTyping(true)
+      try {
+          const s = await getSummary(name)
+          setMessages(prev => [...prev, { id: msgIdCounter++, role: 'ai', content: { summary_data: s, confidence: 'High' } }])
+      } catch (err) { alert("Summary failed: " + err.message) }
+      finally { setIsTyping(false) }
+  }
+
+  const handleDocPreview = async (name) => {
+      try {
+          const p = await getPreview(name)
+          setPreviewDoc(p)
+      } catch (err) { alert("Preview failed: " + err.message) }
   }
 
   return (
@@ -93,13 +119,13 @@ export default function App() {
       <Sidebar
         documents={documents} stats={stats}
         onFileUpload={handleFileUpload} onClearKB={handleClear}
-        onDeleteDoc={async (n) => { await deleteDocument(n); refreshData(); }}
-        onSummary={async (n) => { setIsTyping(true); const s = await getSummary(n); setMessages(prev => [...prev, { id: msgIdCounter++, role: 'ai', content: { summary_data: s, confidence: 'High' } }]); setIsTyping(false); }}
-        onPreview={async (n) => { const p = await getPreview(n); setPreviewDoc(p); }}
+        onDeleteDoc={handleDocDelete}
+        onSummary={handleDocSummary}
+        onPreview={handleDocPreview}
         onExport={handleExport}
         history={history}
         onSelectQuestion={handleSend}
-        onSearch={async (q) => { if (!q) { setSearchQuery(null); return; } const r = await searchSnippets(q); setSearchQuery(r.results); }}
+        onSearch={async (q) => { if (!q) { setSearchQuery(null); return; } try { const r = await searchSnippets(q); setSearchQuery(r.results); } catch { setSearchQuery([]); } }}
       />
 
       <main className="flex-1 flex flex-col min-w-0 relative">
