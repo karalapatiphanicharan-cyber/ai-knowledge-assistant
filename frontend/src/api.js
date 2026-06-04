@@ -54,7 +54,7 @@ export async function getDocuments() {
 }
 
 export async function deleteDocument(filename) {
-  const res = await fetchWithTimeout(`${BASE_URL}/documents/${encodeURIComponent(filename)}`, { method: "DELETE" });
+  const res = await fetchWithTimeout(`${BASE_URL}/document/${encodeURIComponent(filename)}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Delete failed");
   return await res.json();
 }
@@ -66,15 +66,13 @@ export async function getStats() {
 }
 
 export async function getPreview(filename) {
-  const res = await fetchWithTimeout(`${BASE_URL}/documents/${encodeURIComponent(filename)}/preview`, { method: "GET" });
+  const res = await fetchWithTimeout(`${BASE_URL}/document/${encodeURIComponent(filename)}/preview`, { method: "GET" });
   if (!res.ok) throw new Error("Fetch preview failed");
   return await res.json();
 }
 
-export async function getSummary(filename = null) {
-  let url = `${BASE_URL}/summary`;
-  if (filename) url += `?filename=${encodeURIComponent(filename)}`;
-  const res = await fetchWithTimeout(url, { method: "GET", timeout: 60000 });
+export async function getSummary(filename) {
+  const res = await fetchWithTimeout(`${BASE_URL}/document/${encodeURIComponent(filename)}/summary`, { method: "GET", timeout: 60000 });
   if (!res.ok) throw new Error("Fetch summary failed");
   return await res.json();
 }
@@ -86,7 +84,7 @@ export async function searchSnippets(query) {
 }
 
 export async function getSystemStatus() {
-  const res = await fetchWithTimeout(`${BASE_URL}/system-status`, { method: "GET" });
+  const res = await fetchWithTimeout(`${BASE_URL}/status`, { method: "GET" });
   if (!res.ok) throw new Error("Fetch status failed");
   return await res.json();
 }

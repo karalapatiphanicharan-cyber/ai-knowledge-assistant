@@ -67,7 +67,7 @@ export default function Sidebar({ documents, stats, onFileUpload, onClearKB, onD
           <p className="px-2 text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-3">Knowledge Base</p>
           {documents.length === 0 ? (
             <div className="px-3 py-6 border border-dashed border-white/5 rounded-2xl text-center text-[11px] text-slate-600">
-               Drop documents to start
+               Upload documents to start
             </div>
           ) : (
             <ul className="space-y-2">
@@ -80,7 +80,7 @@ export default function Sidebar({ documents, stats, onFileUpload, onClearKB, onD
                        <div className="text-[9px] text-slate-500 flex items-center gap-2">
                           <span>{doc.size_kb} KB</span>
                           <span>•</span>
-                          <span>{doc.timestamp}</span>
+                          <span>{doc.chunk_count} Chunks</span>
                        </div>
                     </div>
                   </div>
@@ -116,7 +116,7 @@ export default function Sidebar({ documents, stats, onFileUpload, onClearKB, onD
         </button>
         <button onClick={onExport} className="w-full py-2 px-4 rounded-xl border border-white/10 text-slate-400 text-[12px] font-bold hover:bg-white/5 transition-all flex items-center justify-center gap-2">
            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-           Export Conversation
+           Export Chat
         </button>
         <button onClick={onClearKB} className="w-full py-2 px-4 rounded-xl bg-red-500/5 text-red-500 text-[11px] font-bold hover:bg-red-500/10 transition-all border border-red-500/10">
           Clear Everything
