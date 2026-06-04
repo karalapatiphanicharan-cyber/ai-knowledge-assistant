@@ -1,16 +1,20 @@
-# Node
-node_modules/
-dist/
-build/
-
 # Python
-venv/
 __pycache__/
-*.pyc
-
-# Env
+*.py[cod]
+*.class
+venv/
+.venv/
 .env
 
-# OS
-.DS_Store
-Thumbs.db
+# Backend Data
+backend/data/*.index
+backend/data/*.json
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/dev_output.log
+
+# Logs
+*.log
