@@ -29,7 +29,18 @@ const SourceCard = ({ source }) => (
         </span>
       )}
     </div>
-    {source.chunk_id && <p className="text-[10px] text-slate-500 mb-1">{source.chunk_id}</p>}
+    <div className="flex flex-wrap gap-1.5 mb-1">
+      {source.chunk_id && <span className="text-[10px] text-slate-500">{source.chunk_id}</span>}
+      {typeof source.chunk_count === 'number' && (
+        <span className="text-[10px] text-slate-500">Chunk {(source.chunk_index ?? 0) + 1}/{source.chunk_count}</span>
+      )}
+      {typeof source.retrieved_chunk_count === 'number' && (
+        <span className="text-[10px] text-slate-500">Retrieved {source.retrieved_chunk_count}</span>
+      )}
+      {typeof source.similarity_score === 'number' && (
+        <span className="text-[10px] text-slate-500">Similarity {source.similarity_score.toFixed(3)}</span>
+      )}
+    </div>
     {source.snippet && <p className="text-[11px] leading-5 text-slate-400">{source.snippet}</p>}
   </div>
 )

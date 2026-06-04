@@ -19,6 +19,10 @@ class SourceItem(BaseModel):
     chunk_id: str
     confidence_score: float
     snippet: str
+    chunk_index: int | None = None
+    chunk_count: int | None = None
+    retrieved_chunk_count: int | None = None
+    similarity_score: float | None = None
 
 class QueryResponse(BaseModel):
     """Assistant-quality response schema."""
@@ -41,6 +45,6 @@ async def query_documents(payload: QueryRequest):
     except Exception as e:
         print(f"[API] Error: {e}")
         return QueryResponse(
-            answer="I don't know based on the document",
+            answer="Information not found in uploaded documents.",
             sources=[]
         )
