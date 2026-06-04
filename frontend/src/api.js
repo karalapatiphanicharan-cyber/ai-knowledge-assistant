@@ -1,8 +1,3 @@
-/**
- * API client for communicating with the KnowAI FastAPI backend.
- * Optimized for production with all new features.
- */
-
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
 async function fetchWithTimeout(resource, options = {}) {
@@ -81,6 +76,12 @@ export async function getSummary(filename = null) {
   if (filename) url += `?filename=${encodeURIComponent(filename)}`;
   const res = await fetchWithTimeout(url, { method: "GET", timeout: 60000 });
   if (!res.ok) throw new Error("Fetch summary failed");
+  return await res.json();
+}
+
+export async function searchSnippets(query) {
+  const res = await fetchWithTimeout(`${BASE_URL}/search-snippets?q=${encodeURIComponent(query)}`, { method: "GET" });
+  if (!res.ok) throw new Error("Search failed");
   return await res.json();
 }
 
