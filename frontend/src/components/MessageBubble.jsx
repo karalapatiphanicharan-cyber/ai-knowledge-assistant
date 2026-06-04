@@ -14,8 +14,28 @@ const CheckIcon = () => (
   </svg>
 )
 
+const SourceCard = ({ source }) => (
+  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+    <div className="flex items-center justify-between gap-3 mb-1">
+      <div className="flex items-center gap-1.5 min-w-0 text-[12px] text-slate-200">
+        <svg className="w-3.5 h-3.5 flex-shrink-0 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+        </svg>
+        <span className="truncate">{source.filename || source.file || source}</span>
+      </div>
+      {typeof source.confidence_score === 'number' && (
+        <span className="text-[10px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+          {Math.round(source.confidence_score * 100)}%
+        </span>
+      )}
+    </div>
+    {source.chunk_id && <p className="text-[10px] text-slate-500 mb-1">{source.chunk_id}</p>}
+    {source.snippet && <p className="text-[11px] leading-5 text-slate-400">{source.snippet}</p>}
+  </div>
+)
+
 const SourceTag = ({ label, title }) => (
-  <button 
+  <button
     title={title}
     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] text-slate-400 hover:text-slate-200 transition-all"
   >
@@ -82,14 +102,12 @@ export function AIMessage({ content }) {
 
           {content.sources && content.sources.length > 0 && (
             <div className="pt-3 border-t border-white/8">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">Sources Used:</span>
+              <span className="block text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2">Sources Used:</span>
+              <div className="grid gap-2">
                 {content.sources.map((src, i) => (
-                  <SourceTag 
-                    key={i} 
-                    label={typeof src === 'object' ? src.file : src} 
-                    title={typeof src === 'object' ? src.snippet : ''}
-                  />
+                  typeof src === 'object'
+                    ? <SourceCard key={i} source={src} />
+                    : <SourceTag key={i} label={src} title="" />
                 ))}
               </div>
             </div>

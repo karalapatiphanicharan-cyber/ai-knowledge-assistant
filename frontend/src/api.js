@@ -90,6 +90,46 @@ export async function uploadDocument(file) {
   }
 }
 
+export async function deleteDocument(filename) {
+  const res = await fetchWithTimeout(`${BASE_URL}/documents/${encodeURIComponent(filename)}`, {
+    method: "DELETE",
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Delete failed (${res.status})`);
+  }
+
+  return await res.json();
+}
+
+export async function previewDocument(filename) {
+  const res = await fetchWithTimeout(`${BASE_URL}/documents/${encodeURIComponent(filename)}/preview`, {
+    method: "GET",
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Preview failed (${res.status})`);
+  }
+
+  return await res.json();
+}
+
+export async function summarizeDocument(filename) {
+  const res = await fetchWithTimeout(`${BASE_URL}/documents/${encodeURIComponent(filename)}/summary`, {
+    method: "GET",
+    timeout: 30000,
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Summary failed (${res.status})`);
+  }
+
+  return await res.json();
+}
+
 /**
  * Clear the entire knowledge base.
  */

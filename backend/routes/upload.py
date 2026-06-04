@@ -6,8 +6,8 @@ chunks it, generates embeddings, and stores them in the vector DB.
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from utils.file_loader import extract_text
 from utils.security import sanitize_filename
-from services.rag_pipeline import ingest_document
-from services.vector_db import clear_index, get_unique_sources
+from services.rag_pipeline import ingest_document, preview_document, summarize_document
+from services.vector_db import clear_index, delete_source, get_document_summaries
 
 router = APIRouter()
 
@@ -67,5 +67,35 @@ async def list_documents():
     """
     Return a list of unique documents currently in the knowledge base.
     """
-    docs = get_unique_sources()
+    docs = get_document_summaries()
     return {"documents": docs}
+
+@router.delete("/documents/{filename}")
+async def delete_document(filename: str):
+    """
+    Delete one document and all of its chunks.
+    """
+    removed = delete_source(sanitize_filename(filename))
+    if not removed:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return {"status": "success", "message": f"Deleted '{sanitize_filename(filename)}'."}
+
+@router.get("/documents/{filename}/preview")
+async def preview_uploaded_document(filename: str):
+    """
+    Return extracted text for TXT/DOCX and extracted PDF text for preview.
+    """
+    preview = preview_document(sanitize_filename(filename))
+    if preview is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return preview
+
+@router.get("/documents/{filename}/summary")
+async def summarize_uploaded_document(filename: str):
+    """
+    Return a grounded summary and relevant suggested questions.
+    """
+    summary = summarize_document(sanitize_filename(filename))
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return summary

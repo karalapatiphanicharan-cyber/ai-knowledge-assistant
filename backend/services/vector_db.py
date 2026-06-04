@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-DATA_DIR = "data"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
 INDEX_PATH = os.path.join(DATA_DIR, "faiss.index")
 METADATA_PATH = os.path.join(DATA_DIR, "metadata.json")
 DIMENSION = 384 # All-MiniLM-L6-v2 output size
@@ -80,6 +81,11 @@ def add_vectors(embeddings: np.ndarray, metadata: list[dict]) -> int:
             logger.error(f"[VectorDB] Error adding vectors: {e}")
             raise
 
+def replace_source(source: str, embeddings: np.ndarray, metadata: list[dict]) -> int:
+    """Replace all chunks for a source, then add the new vectors."""
+    delete_source(source, persist=False)
+    return add_vectors(embeddings, metadata)
+
 def search(query_embedding: np.ndarray, top_k: int = 5) -> list[dict]:
     """Search for most similar chunks."""
     with _lock:
@@ -98,6 +104,7 @@ def search(query_embedding: np.ndarray, top_k: int = 5) -> list[dict]:
                     "content": _chunks[idx]["content"],
                     "source": _chunks[idx]["source"],
                     "index": _chunks[idx].get("index", 0),
+                    "chunk_id": _chunks[idx].get("chunk_id"),
                     "score": round(float(dist), 4),
                 })
             return results
@@ -115,6 +122,27 @@ def clear_index():
         if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
         logger.info("[VectorDB] Database cleared.")
 
+def _rebuild_index_from_chunks():
+    """Recreate the FAISS index from chunk embeddings after deletions."""
+    global _index
+    _index = faiss.IndexFlatL2(DIMENSION)
+    vectors = [chunk.get("embedding") for chunk in _chunks if chunk.get("embedding") is not None]
+    if vectors:
+        _index.add(np.array(vectors, dtype="float32"))
+
+def delete_source(source: str, persist: bool = True) -> bool:
+    """Remove every chunk belonging to a source document."""
+    global _chunks
+    with _lock:
+        before = len(_chunks)
+        _chunks = [chunk for chunk in _chunks if chunk.get("source") != source]
+        deleted = len(_chunks) != before
+        if deleted:
+            _rebuild_index_from_chunks()
+            if persist:
+                _save_to_disk()
+        return deleted
+
 def get_total_vectors() -> int:
     with _lock:
         return _index.ntotal if _index else 0
@@ -123,3 +151,20 @@ def get_unique_sources() -> list[str]:
     """Return a list of unique source filenames present in the DB."""
     with _lock:
         return list(dict.fromkeys(chunk["source"] for chunk in _chunks))
+
+def get_document_summaries() -> list[dict]:
+    """Return document names and chunk counts."""
+    with _lock:
+        summaries = {}
+        for chunk in _chunks:
+            source = chunk["source"]
+            summaries.setdefault(source, {"filename": source, "chunks": 0, "characters": 0})
+            summaries[source]["chunks"] += 1
+            summaries[source]["characters"] += len(chunk.get("content", ""))
+        return list(summaries.values())
+
+def get_source_chunks(source: str) -> list[dict]:
+    """Return all chunks for a source in document order."""
+    with _lock:
+        chunks = [chunk for chunk in _chunks if chunk.get("source") == source]
+        return sorted(chunks, key=lambda item: item.get("index", 0))

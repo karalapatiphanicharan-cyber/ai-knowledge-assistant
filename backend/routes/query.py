@@ -14,7 +14,10 @@ class QueryRequest(BaseModel):
 
 class SourceItem(BaseModel):
     """Structured source information."""
-    file: str
+    filename: str
+    file: str | None = None
+    chunk_id: str
+    confidence_score: float
     snippet: str
 
 class QueryResponse(BaseModel):

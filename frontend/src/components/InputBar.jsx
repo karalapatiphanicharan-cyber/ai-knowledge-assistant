@@ -22,9 +22,8 @@ export default function InputBar({ onSend, onFileUpload, disabled }) {
   }
 
   const handleFileChange = (e) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      onFileUpload(file)
+    if (e.target.files?.length) {
+      onFileUpload(e.target.files)
       // Reset so the same file can be re-selected if needed
       e.target.value = ''
     }
@@ -47,6 +46,7 @@ export default function InputBar({ onSend, onFileUpload, disabled }) {
           ref={fileInputRef}
           type="file"
           accept={ACCEPTED_TYPES}
+          multiple
           onChange={handleFileChange}
           className="hidden"
         />
@@ -62,12 +62,6 @@ export default function InputBar({ onSend, onFileUpload, disabled }) {
           disabled={disabled}
         />
 
-        <button className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-          </svg>
-        </button>
-
         <button
           onClick={handleSend}
           disabled={!value.trim() || disabled}
@@ -78,7 +72,7 @@ export default function InputBar({ onSend, onFileUpload, disabled }) {
           </svg>
         </button>
       </div>
-      <p className="text-center text-[10px] text-slate-700 mt-2">Powered by GPT-4. AI can make mistakes. Verify important info.</p>
+      <p className="text-center text-[10px] text-slate-700 mt-2">Answers are grounded in uploaded documents. Verify important details.</p>
     </div>
   )
 }
