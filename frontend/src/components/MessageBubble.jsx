@@ -30,13 +30,27 @@ export function UserMessage({ content }) {
   return (
     <div className="flex justify-end message-appear">
       <div className="max-w-[70%] px-4 py-3 rounded-2xl rounded-tr-sm bg-blue-600 text-white text-[13.5px] leading-relaxed shadow-lg shadow-blue-500/10">
-        {content}
+        {typeof content === 'string' ? content : JSON.stringify(content)}
       </div>
     </div>
   )
 }
 
 export function AIMessage({ content }) {
+  // Graceful fallback for string content
+  if (typeof content === 'string') {
+    return (
+      <div className="flex items-start gap-3 message-appear">
+        <AIAvatar />
+        <div className="flex-1 max-w-[80%]">
+          <div className="bg-[#16181f] border border-white/8 rounded-2xl rounded-tl-sm p-4 shadow-xl text-[13px] text-slate-300">
+            {content}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-start gap-3 message-appear">
       <AIAvatar />
@@ -52,7 +66,7 @@ export function AIMessage({ content }) {
             </p>
           )}
 
-          {content.items && (
+          {content.items && content.items.length > 0 && (
             <ul className="space-y-2 mb-4">
               {content.items.map((item, i) => (
                 <li key={i} className="flex items-start gap-2.5">

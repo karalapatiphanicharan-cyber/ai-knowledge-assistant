@@ -5,6 +5,7 @@ chunks it, generates embeddings, and stores them in the vector DB.
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from utils.file_loader import extract_text
+from utils.security import sanitize_filename
 from services.rag_pipeline import ingest_document
 
 router = APIRouter()
@@ -26,7 +27,7 @@ async def upload_file(file: UploadFile = File(...)):
     The file is read, text is extracted, chunked, embedded,
     and stored in the FAISS vector database.
     """
-    ext = _get_extension(file.filename)
+    ext = _get_extension(sanitize_filename(file.filename))
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
@@ -43,11 +44,11 @@ async def upload_file(file: UploadFile = File(...)):
     if not text.strip():
         raise HTTPException(status_code=422, detail="The uploaded file contains no extractable text.")
 
-    num_chunks = ingest_document(text, source=file.filename)
+    num_chunks = ingest_document(text, source=sanitize_filename(file.filename))
 
     return {
         "status": "success",
-        "filename": file.filename,
+        "filename": sanitize_filename(file.filename),
         "chunks_stored": num_chunks,
-        "message": f"Successfully processed and stored {num_chunks} chunks from '{file.filename}'.",
+        "message": f"Successfully processed and stored {num_chunks} chunks from '{sanitize_filename(file.filename)}'.",
     }

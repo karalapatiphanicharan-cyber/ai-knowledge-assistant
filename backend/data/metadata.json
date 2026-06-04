@@ -10,5 +10,23 @@
     "source": "Simple_Hipster_CV__1_ (2).pdf",
     "index": 0,
     "char_count": 1680
+  },
+  {
+    "content": "The capital of France is Paris. It is known for the Eiffel Tower.",
+    "source": "test.txt",
+    "index": 0,
+    "char_count": 65
+  },
+  {
+    "content": "The capital of France is Paris. It is known for the Eiffel Tower.",
+    "source": "test.txt",
+    "index": 0,
+    "char_count": 65
+  },
+  {
+    "content": "Verification content: the secret code is 12345.",
+    "source": "verify.txt",
+    "index": 0,
+    "char_count": 47
   }
 ]
