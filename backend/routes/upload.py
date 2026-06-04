@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from utils.file_loader import extract_text
 from utils.security import sanitize_filename
 from services.rag_pipeline import ingest_document, get_doc_summary
-from services.vector_db import clear_index, get_unique_sources, remove_document, get_stats, get_document_preview, _chunks
+from services.vector_db import clear_index, get_unique_sources, remove_document, get_stats, get_document_preview, get_all_chunks
 
 router = APIRouter()
 
@@ -22,7 +22,8 @@ async def upload_file(file: UploadFile = File(...)):
              raise ValueError("Document already exists.")
 
         num_chunks = ingest_document(text, source=safe_name)
-        for chunk in _chunks:
+        chunks = get_all_chunks()
+        for chunk in chunks:
             if chunk["source"] == safe_name:
                 chunk["size_kb"] = size_kb
         return {"status": "success", "filename": safe_name, "chunks_stored": num_chunks}
@@ -38,16 +39,18 @@ async def clear_knowledge_base():
 async def list_documents():
     docs_metadata = []
     seen = set()
-    for chunk in _chunks:
-        if chunk["source"] not in seen:
+    chunks = get_all_chunks()
+    for chunk in chunks:
+        source = chunk["source"]
+        if source not in seen:
             docs_metadata.append({
-                "id": chunk["source"],
-                "name": chunk["source"],
+                "id": source,
+                "name": source,
                 "size_kb": chunk.get("size_kb", 0),
                 "timestamp": chunk.get("timestamp", "Unknown"),
-                "chunk_count": len([c for c in _chunks if c["source"] == chunk["source"]])
+                "chunk_count": len([c for c in chunks if c["source"] == source])
             })
-            seen.add(chunk["source"])
+            seen.add(source)
     return {"documents": docs_metadata}
 
 @router.delete("/document/{filename}")

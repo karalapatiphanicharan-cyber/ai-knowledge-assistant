@@ -51,7 +51,6 @@ export default function App() {
 
     try {
       const data = await queryDocuments(question)
-      // Check if it's a summary or normal answer
       setMessages(prev => [...prev, { id: msgIdCounter++, role: 'ai', content: data }])
     } catch (err) {
       setMessages(prev => [...prev, { id: msgIdCounter++, role: 'ai', content: "Error: " + err.message }])
@@ -61,9 +60,10 @@ export default function App() {
   const handleFileUpload = async (file) => {
     setIsTyping(true)
     try {
-      await uploadDocument(file)
+      const data = await uploadDocument(file)
       await refreshData()
-      const sum = const safe_name = data.filename; await getSummary(safe_name)
+      const safe_name = data.filename
+      const sum = await getSummary(safe_name)
       setMessages(prev => [...prev, {
         id: msgIdCounter++,
         role: 'ai',
