@@ -21,17 +21,6 @@ const ChatIcon = () => (
   </svg>
 )
 
-const knowledgeDocs = [
-  { name: 'Product_Spec_v2.pdf', type: 'pdf' },
-  { name: 'API_Endpoints.json', type: 'json' },
-  { name: 'Q4_Market_Research.docx', type: 'docx' },
-]
-
-const recentChats = [
-  { name: 'Financial Analysis 2024', active: true },
-  { name: 'Competitor Overview', active: false },
-]
-
 export default function Sidebar({ onFileUpload }) {
   const fileInputRef = useRef(null)
 
@@ -56,44 +45,27 @@ export default function Sidebar({ onFileUpload }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 space-y-6">
-        {/* Knowledge Base */}
         <section>
           <p className="px-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">Knowledge Base</p>
-          <ul className="space-y-0.5">
-            {knowledgeDocs.map((doc) => (
-              <li key={doc.name}>
-                <button className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all text-[13px] text-left group">
-                  <FileIcon type={doc.type} />
-                  <span className="truncate">{doc.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="px-3 py-4 border border-dashed border-white/10 rounded-xl text-center">
+            <p className="text-[11px] text-slate-500">Upload documents to see them here.</p>
+          </div>
         </section>
 
-        {/* Recent Chats */}
         <section>
           <p className="px-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">Recent Chats</p>
           <ul className="space-y-0.5">
-            {recentChats.map((chat) => (
-              <li key={chat.name}>
-                <button
-                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-left transition-all ${
-                    chat.active
-                      ? 'bg-blue-600/15 text-blue-300 border border-blue-500/20'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                  }`}
-                >
-                  <ChatIcon />
-                  <span className="truncate">{chat.name}</span>
-                </button>
-              </li>
-            ))}
+            <li>
+              <button className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-left transition-all bg-blue-600/15 text-blue-300 border border-blue-500/20">
+                <ChatIcon />
+                <span className="truncate">Current Session</span>
+              </button>
+            </li>
           </ul>
         </section>
       </div>
 
-      {/* Upload Button — now functional */}
+      {/* Upload Button */}
       <div className="p-4 border-t border-white/5">
         <button
           onClick={() => fileInputRef.current?.click()}

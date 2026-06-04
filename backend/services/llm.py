@@ -1,14 +1,17 @@
 from transformers import pipeline
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Load model once globally
-print("[LLM] Loading google/flan-t5-small...")
+logger.info("[LLM] Loading google/flan-t5-small...")
 try:
     # Optimized for CPU usage
     generator = pipeline("text2text-generation", model="google/flan-t5-small")
-    print("[LLM] Model ready.")
+    logger.info("[LLM] Model ready.")
 except Exception as e:
-    print(f"[LLM] Error: {e}")
+    logger.error(f"[LLM] Error: {e}")
     generator = None
 
 def _clean_repetitive_sentences(text: str) -> str:
@@ -34,20 +37,7 @@ def generate_answer(query: str, context: str) -> str:
     is_summary = any(kw in q_lower for kw in ["summary", "summarize", "overview"])
     
     # Senior-level prompt for clear, non-repetitive answers
-    prompt = f"""You are a helpful AI Assistant.
-Answer the question using ONLY the context below. 
-
-Instructions:
-- Be concise and direct.
-- Do NOT repeat the same sentence.
-- Summarize clearly.
-- If not found, say 'I don't know'.
-
-Context:
-{context[:1000]}
-
-Question: {query}
-Answer:"""
+    prompt = f"Context: {context[:800]}\n\nQuestion: {query}\n\nAnswer concisely using the context above. If the answer is not in the context, say 'I don't know'."
 
     try:
         if generator is None:
@@ -60,7 +50,7 @@ Answer:"""
             prompt, 
             max_length=max_tokens, 
             do_sample=False, 
-            repetition_penalty=1.2 # Prevent the model from repeating itself
+            repetition_penalty=1.5 # Increased penalty
         )
         
         answer = result[0]["generated_text"].strip()
@@ -68,11 +58,11 @@ Answer:"""
         # Clean up any potential repeats
         answer = _clean_repetitive_sentences(answer)
         
-        if not answer or len(answer) < 10:
-            return context[:250] + "..."
+        if not answer or len(answer) < 5 or answer.lower() == "answer:":
+            return "I couldn't find a definitive answer in the documents provided."
             
         return answer
 
     except Exception as e:
-        print(f"[LLM] Error: {e}")
-        return context[:200] + "..."
+        logger.error(f"[LLM] Error: {e}")
+        return "An error occurred during answer generation."
