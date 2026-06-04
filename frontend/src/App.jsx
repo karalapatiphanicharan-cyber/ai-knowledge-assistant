@@ -1,54 +1,67 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import ChatWindow from './components/ChatWindow'
 import InputBar from './components/InputBar'
-import { queryDocuments, uploadDocument } from './api'
+import { queryDocuments, uploadDocument, clearKnowledgeBase, getDocuments } from './api'
 
 let msgIdCounter = 1
 
 export default function App() {
-  const [messages, setMessages] = useState([])
-  const [isTyping, setIsTyping] = useState(false)
-
-  // -----------------------------------------------------------------------
-  // Chat: send question to /api/query, display results
-  // -----------------------------------------------------------------------
-  const handleSend = async (text) => {
-    const userMsg = { id: msgIdCounter++, role: 'user', content: text }
-    setMessages((prev) => [...prev, userMsg])
-    setIsTyping(true)
-
-    try {
-      const data = await queryDocuments(text)
-
-      // Build structured content that MessageBubble already renders
-      const aiContent = {
-        intro: {
-          prefix: data.answer,
-          highlight: null,
-          suffix: '',
-        },
-        items: data.items || [],
-        sources: data.sources || [],
+  const [messages, setMessages] = useState([
+    {
+      id: 0,
+      role: 'ai',
+      content: {
+        intro: { prefix: '👋', highlight: 'Welcome to KnowAI!', suffix: ' I can help you analyze your documents.' },
+        items: [
+          { label: 'Upload', value: 'Add PDF, TXT or DOCX files to get started.' },
+          { label: 'Ask', value: 'I answer strictly based on your uploaded documents.' }
+        ],
+        sources: []
       }
+    }
+  ])
+  const [isTyping, setIsTyping] = useState(false)
+  const [documents, setDocuments] = useState([])
 
-      const aiMsg = { id: msgIdCounter++, role: 'ai', content: aiContent }
-      setMessages((prev) => [...prev, aiMsg])
+  // Fetch documents on mount
+  useEffect(() => {
+    refreshDocuments()
+  }, [])
+
+  const refreshDocuments = async () => {
+    try {
+      const data = await getDocuments()
+      setDocuments(data.documents || [])
     } catch (err) {
-      // Show error as an AI message so it appears inline in the chat
-      const errorMsg = {
+      console.error("Failed to refresh documents:", err)
+    }
+  }
+
+  const handleSend = async (question) => {
+    const userMsg = { id: msgIdCounter++, role: 'user', content: question }
+    setMessages((prev) => [...prev, userMsg])
+
+    setIsTyping(true)
+    try {
+      const data = await queryDocuments(question)
+
+      const aiMsg = {
         id: msgIdCounter++,
         role: 'ai',
         content: {
-          intro: {
-            prefix: '⚠️ Error:',
-            highlight: null,
-            suffix: ` ${err.message}`,
-          },
+          intro: { prefix: "", highlight: "", suffix: data.answer },
           items: [],
-          sources: [],
-        },
+          sources: data.sources
+        }
+      }
+      setMessages((prev) => [...prev, aiMsg])
+    } catch (err) {
+      const errorMsg = {
+        id: msgIdCounter++,
+        role: 'ai',
+        content: "Sorry, I encountered an error. Please check the backend connection."
       }
       setMessages((prev) => [...prev, errorMsg])
     } finally {
@@ -56,11 +69,7 @@ export default function App() {
     }
   }
 
-  // -----------------------------------------------------------------------
-  // File upload: send file to /api/upload, show result in chat
-  // -----------------------------------------------------------------------
   const handleFileUpload = async (file) => {
-    // Show an "uploading…" user-side message
     const uploadingMsg = {
       id: msgIdCounter++,
       role: 'user',
@@ -71,6 +80,7 @@ export default function App() {
 
     try {
       const data = await uploadDocument(file)
+      await refreshDocuments()
 
       const successMsg = {
         id: msgIdCounter++,
@@ -108,9 +118,32 @@ export default function App() {
     }
   }
 
+  const handleClearKB = async () => {
+    setIsTyping(true)
+    try {
+      await clearKnowledgeBase()
+      setDocuments([])
+      setMessages([
+        {
+          id: msgIdCounter++,
+          role: 'ai',
+          content: {
+            intro: { prefix: '🧹', highlight: 'Knowledge Base Cleared!', suffix: ' All documents and chat history have been reset.' },
+            items: [],
+            sources: []
+          }
+        }
+      ])
+    } catch (err) {
+      alert("Failed to clear knowledge base: " + err.message)
+    } finally {
+      setIsTyping(false)
+    }
+  }
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#0d0f12]">
-      <Sidebar onFileUpload={handleFileUpload} />
+      <Sidebar documents={documents} onFileUpload={handleFileUpload} onClearKB={handleClearKB} />
       <main className="flex-1 flex flex-col min-w-0">
         <Header />
         <ChatWindow messages={messages} isTyping={isTyping} />
