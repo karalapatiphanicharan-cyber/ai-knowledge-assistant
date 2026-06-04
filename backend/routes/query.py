@@ -41,6 +41,6 @@ async def query_documents(payload: QueryRequest):
     except Exception as e:
         print(f"[API] Error: {e}")
         return QueryResponse(
-            answer="I don't know based on the document",
+            answer="Information not found in uploaded documents.",
             sources=[]
         )
