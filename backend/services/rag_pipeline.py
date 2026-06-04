@@ -2,8 +2,8 @@ import logging
 import re
 import time
 from services.embedding import generate_embeddings, generate_single_embedding
-from services.vector_db import add_vectors, search
-from services.llm import generate_answer
+from services.vector_db import add_vectors, search, get_stats, get_document_preview
+from services.llm import generate_answer, generate_summary, suggest_questions
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
-SIMILARITY_THRESHOLD = 1.2 # Relaxed threshold slightly for testing
+SIMILARITY_THRESHOLD = 0.9 # Optimized for production precision
 
 def _clean_text(text: str) -> str:
     """Normalize whitespace and remove junk characters."""
@@ -67,16 +67,18 @@ def query_knowledge_base(question: str, top_k: int = 5) -> dict:
         results = search(query_embedding, top_k=top_k)
 
         if not results:
-            logger.info("[RAG] No results found in index.")
             return {
                 "answer": "Information not found in uploaded documents.",
-                "sources": []
+                "sources": [],
+                "confidence": "Low"
             }
 
         # 1. Similarity Filtering & Logging
         filtered_results = []
+        best_score = 10.0
         for r in results:
             score = r["score"]
+            best_score = min(best_score, score)
             if score <= SIMILARITY_THRESHOLD:
                 filtered_results.append(r)
                 logger.info(f"[RAG] Selected chunk (score: {score:.4f}) from {r['source']}")
@@ -84,10 +86,10 @@ def query_knowledge_base(question: str, top_k: int = 5) -> dict:
                 logger.info(f"[RAG] Filtered out chunk (score: {score:.4f}) from {r['source']}")
 
         if not filtered_results:
-            logger.info("[RAG] All chunks filtered out by threshold.")
             return {
                 "answer": "Information not found in uploaded documents.",
-                "sources": []
+                "sources": [],
+                "confidence": "Low"
             }
 
         # 2. Ranking & Deduplication
@@ -106,7 +108,12 @@ def query_knowledge_base(question: str, top_k: int = 5) -> dict:
             fname = r["source"]
             if fname not in seen_files:
                 snippet = r["content"][:150].replace('\n', ' ').strip() + "..."
-                sources.append({"file": fname, "snippet": snippet, "score": r["score"]})
+                sources.append({
+                    "file": fname,
+                    "snippet": snippet,
+                    "score": round(r["score"], 4),
+                    "chunk_id": r.get("index", 0)
+                })
                 seen_files.add(fname)
 
         # Build context
@@ -116,15 +123,46 @@ def query_knowledge_base(question: str, top_k: int = 5) -> dict:
         # 3. Grounded Generation
         answer = generate_answer(question, context)
 
+        # Confidence calculation
+        confidence = "High" if best_score < 0.6 else "Medium" if best_score < 0.85 else "Low"
+
         logger.info(f"[RAG] Query completed in {time.time() - start_time:.2f}s")
         return {
             "answer": answer,
-            "sources": sources
+            "sources": sources,
+            "confidence": confidence
         }
 
     except Exception as e:
         logger.error(f"[RAG] Error during query: {e}")
         return {
             "answer": "I encountered an error while searching your documents.",
-            "sources": []
+            "sources": [],
+            "confidence": "Low"
         }
+
+def get_doc_summary(source_name: str = None) -> dict:
+    """Generate summary and stats for documents."""
+    from services.vector_db import _chunks
+
+    if source_name:
+        doc_chunks = [c for c in _chunks if c["source"] == source_name]
+    else:
+        doc_chunks = _chunks
+
+    if not doc_chunks:
+        return {"error": "No documents found."}
+
+    context = "\n".join(c["content"] for c in doc_chunks[:5])
+    summary = generate_summary(context)
+    stats = get_stats()
+
+    # Simple topic extraction logic
+    topics = list(set(re.findall(r'\b[A-Z][a-z]{3,}\b', context)))[:5]
+
+    return {
+        "summary": summary,
+        "topics": topics,
+        "stats": stats,
+        "suggestions": suggest_questions(context)
+    }

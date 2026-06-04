@@ -74,3 +74,64 @@ def generate_answer(query: str, context: str) -> str:
     except Exception as e:
         logger.error(f"[LLM] Error: {e}")
         return NOT_FOUND
+
+def generate_summary(context: str) -> str:
+    """Generate a structured summary of the document."""
+    if not context or not context.strip():
+        return "No content available to summarize."
+
+    prompt = (
+        f"Summarize the following text into an executive summary, main topics, and key points.\n\n"
+        f"Text: {context[:1000]}\n\n"
+        f"Summary:"
+    )
+
+    try:
+        if generator is None:
+            raise Exception("Model not loaded")
+
+        result = generator(
+            prompt,
+            max_length=150,
+            do_sample=False,
+            repetition_penalty=1.2
+        )
+
+        return result[0]["generated_text"].strip()
+    except Exception as e:
+        logger.error(f"[LLM Summary] Error: {e}")
+        return "Error generating summary."
+
+def suggest_questions(context: str) -> list[str]:
+    """Suggest 3 questions based on the context."""
+    if not context or not context.strip():
+        return ["What is this document about?"]
+
+    prompt = (
+        f"Based on the text below, generate 3 relevant questions that a user might ask.\n\n"
+        f"Text: {context[:800]}\n\n"
+        f"Questions:"
+    )
+
+    try:
+        if generator is None:
+            raise Exception("Model not loaded")
+
+        result = generator(
+            prompt,
+            max_length=100,
+            do_sample=False
+        )
+
+        text = result[0]["generated_text"].strip()
+        # Simple parsing for flan-t5 output which might be 1. ... 2. ... 3. ...
+        questions = re.split(r'\d\.\s+', text)
+        questions = [q.strip() for q in questions if q.strip() and '?' in q]
+
+        if not questions:
+            return ["What are the key concepts?", "Summarize this document.", "What is the main conclusion?"]
+
+        return questions[:3]
+    except Exception as e:
+        logger.error(f"[LLM Suggestions] Error: {e}")
+        return ["What is this document about?", "What are the key points?"]

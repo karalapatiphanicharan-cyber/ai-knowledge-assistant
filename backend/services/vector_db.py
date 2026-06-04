@@ -115,6 +115,32 @@ def clear_index():
         if os.path.exists(METADATA_PATH): os.remove(METADATA_PATH)
         logger.info("[VectorDB] Database cleared.")
 
+def remove_document(source_name: str):
+    """Remove all chunks associated with a specific document and rebuild index."""
+    global _index, _chunks
+    from services.embedding import generate_embeddings
+
+    with _lock:
+        # Filter out chunks
+        remaining_chunks = [c for c in _chunks if c["source"] != source_name]
+        if len(remaining_chunks) == len(_chunks):
+            return False # Not found
+
+        _chunks = remaining_chunks
+
+        # Rebuild index from scratch (safest way for FlatL2 with small datasets)
+        _index = faiss.IndexFlatL2(DIMENSION)
+        if _chunks:
+            texts = [c["content"] for c in _chunks]
+            # We need to re-embed or store embeddings.
+            # Storing embeddings in metadata would be better for performance.
+            # For now, let's just re-embed (assuming CPU is okay with this for small scale).
+            embeddings = generate_embeddings(texts)
+            _index.add(embeddings.astype("float32"))
+
+        _save_to_disk()
+        return True
+
 def get_total_vectors() -> int:
     with _lock:
         return _index.ntotal if _index else 0
@@ -123,3 +149,30 @@ def get_unique_sources() -> list[str]:
     """Return a list of unique source filenames present in the DB."""
     with _lock:
         return list(dict.fromkeys(chunk["source"] for chunk in _chunks))
+
+def get_stats():
+    """Return KB statistics."""
+    with _lock:
+        sources = list(set(c["source"] for c in _chunks))
+        return {
+            "document_count": len(sources),
+            "chunk_count": len(_chunks),
+            "total_chars": sum(len(c["content"]) for c in _chunks)
+        }
+
+def get_document_preview(source_name: str, limit: int = 500):
+    """Return a preview of the document."""
+    with _lock:
+        doc_chunks = [c for c in _chunks if c["source"] == source_name]
+        doc_chunks.sort(key=lambda x: x.get("index", 0))
+        if not doc_chunks:
+            return None
+
+        full_text = "\n".join(c["content"] for c in doc_chunks)
+        return {
+            "source": source_name,
+            "preview": full_text[:limit] + "..." if len(full_text) > limit else full_text,
+            "word_count": len(full_text.split()),
+            "char_count": len(full_text),
+            "chunk_count": len(doc_chunks)
+        }
