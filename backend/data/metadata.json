@@ -28,5 +28,11 @@
     "source": "verify.txt",
     "index": 0,
     "char_count": 47
+  },
+  {
+    "content": "The quick brown fox jumps over the lazy dog.",
+    "source": "test.txt",
+    "index": 0,
+    "char_count": 44
   }
 ]
