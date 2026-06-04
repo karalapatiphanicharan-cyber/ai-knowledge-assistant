@@ -7,6 +7,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from utils.file_loader import extract_text
 from utils.security import sanitize_filename
 from services.rag_pipeline import ingest_document
+from services.vector_db import clear_index
 
 router = APIRouter()
 
@@ -52,3 +53,11 @@ async def upload_file(file: UploadFile = File(...)):
         "chunks_stored": num_chunks,
         "message": f"Successfully processed and stored {num_chunks} chunks from '{sanitize_filename(file.filename)}'.",
     }
+
+@router.delete("/clear")
+async def clear_knowledge_base():
+    """
+    Wipe the entire knowledge base (index and files).
+    """
+    clear_index()
+    return {"status": "success", "message": "Knowledge base cleared successfully."}
