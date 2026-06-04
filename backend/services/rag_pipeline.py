@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
-SIMILARITY_THRESHOLD = 1.0  # Lower is more similar for L2 distance
+SIMILARITY_THRESHOLD = 1.2 # Relaxed threshold slightly for testing
 
 def _clean_text(text: str) -> str:
     """Normalize whitespace and remove junk characters."""

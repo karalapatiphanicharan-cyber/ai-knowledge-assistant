@@ -118,3 +118,8 @@ def clear_index():
 def get_total_vectors() -> int:
     with _lock:
         return _index.ntotal if _index else 0
+
+def get_unique_sources() -> list[str]:
+    """Return a list of unique source filenames present in the DB."""
+    with _lock:
+        return list(dict.fromkeys(chunk["source"] for chunk in _chunks))

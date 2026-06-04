@@ -35,7 +35,7 @@ async function fetchWithTimeout(resource, options = {}) {
 /**
  * Send a question to the RAG query endpoint.
  * @param {string} question - The user's question
- * @returns {Promise<{answer: string, sources: Array<string>}>}
+ * @returns {Promise<{answer: string, sources: Array<object>}>}
  */
 export async function queryDocuments(question) {
   console.log(`[API] Querying: "${question.substring(0, 50)}..."`);
@@ -86,6 +86,50 @@ export async function uploadDocument(file) {
     return await res.json();
   } catch (err) {
     console.error("[API] Upload failed:", err);
+    throw err;
+  }
+}
+
+/**
+ * Clear the entire knowledge base.
+ */
+export async function clearKnowledgeBase() {
+  console.log("[API] Clearing knowledge base...");
+  try {
+    const res = await fetchWithTimeout(`${BASE_URL}/clear`, {
+      method: "POST",
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || `Clear failed (${res.status})`);
+    }
+
+    return await res.json();
+  } catch (err) {
+    console.error("[API] Clear failed:", err);
+    throw err;
+  }
+}
+
+/**
+ * Get the list of documents currently in the knowledge base.
+ */
+export async function getDocuments() {
+  console.log("[API] Fetching documents...");
+  try {
+    const res = await fetchWithTimeout(`${BASE_URL}/documents`, {
+      method: "GET",
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || `Fetch docs failed (${res.status})`);
+    }
+
+    return await res.json();
+  } catch (err) {
+    console.error("[API] Fetch docs failed:", err);
     throw err;
   }
 }
