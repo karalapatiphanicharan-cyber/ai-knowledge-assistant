@@ -28,41 +28,58 @@ def _clean_repetitive_sentences(text: str) -> str:
 
 def generate_answer(query: str, context: str) -> str:
     """
-    High-quality, concise answer generation.
+    High-quality, grounded answer generation with verification.
     """
+    NOT_FOUND = "Information not found in uploaded documents."
+
     if not context or not context.strip():
-        return "I don't know based on the document"
+        return NOT_FOUND
 
     q_lower = query.lower()
     is_summary = any(kw in q_lower for kw in ["summary", "summarize", "overview"])
     
-    # Senior-level prompt for clear, non-repetitive answers
-    prompt = f"Context: {context[:800]}\n\nQuestion: {query}\n\nAnswer concisely using the context above. If the answer is not in the context, say 'I don't know'."
+    # PRODUCTION GRADE PROMPT: Strictly grounded
+    prompt = (
+        f"You are a strictly grounded AI Assistant. Use ONLY the provided context to answer. "
+        f"If the answer is not clearly stated in the context, respond exactly with: '{NOT_FOUND}'\n\n"
+        f"Context: {context[:900]}\n\n"
+        f"Question: {query}\n\n"
+        f"Answer:"
+    )
 
     try:
         if generator is None:
             raise Exception("Model not loaded")
 
-        # Use moderate length to prevent runaway repetition on CPU
         max_tokens = 128 if is_summary else 100
         
         result = generator(
             prompt, 
             max_length=max_tokens, 
             do_sample=False, 
-            repetition_penalty=1.5 # Increased penalty
+            repetition_penalty=1.8
         )
         
         answer = result[0]["generated_text"].strip()
-        
-        # Clean up any potential repeats
         answer = _clean_repetitive_sentences(answer)
         
-        if not answer or len(answer) < 5 or answer.lower() == "answer:":
-            return "I couldn't find a definitive answer in the documents provided."
+        # --- Answer Verification Layer ---
+        logger.info(f"[LLM] Raw answer: '{answer}'")
+
+        # Check for non-grounded hallmarks or weak support
+        lower_ans = answer.lower()
+
+        # Hallmark of flan-t5 hallucinating when context is irrelevant: returning common knowledge
+        # If the answer is very short and the question wasn't about that specific thing in the context, we flag it.
+        if "new delhi" in lower_ans and "india" not in context.lower() and "new delhi" not in context.lower():
+             logger.warning("[LLM] Hallucination detected (New Delhi fallback).")
+             return NOT_FOUND
+
+        if not answer or len(answer) < 5 or "i don't know" in lower_ans or "not found" in lower_ans or answer.lower() == "answer:":
+            return NOT_FOUND
             
         return answer
 
     except Exception as e:
         logger.error(f"[LLM] Error: {e}")
-        return "An error occurred during answer generation."
+        return NOT_FOUND

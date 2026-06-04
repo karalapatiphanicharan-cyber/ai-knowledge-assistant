@@ -1,0 +1,23 @@
+Device set to use cpu
+INFO:     Started server process [592528]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:56648 - "DELETE /api/clear HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56658 - "POST /api/upload HTTP/1.1" 200 OK
+Both `max_new_tokens` (=256) and `max_length`(=100) seem to have been set. `max_new_tokens` will take precedence. Please refer to the documentation for more information. (https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)
+[API] Query: What is the capital of Germany?...
+INFO:     127.0.0.1:56666 - "POST /api/query HTTP/1.1" 200 OK
+[API] Query: What is the capital of India?...
+INFO:     127.0.0.1:56668 - "POST /api/query HTTP/1.1" 200 OK
+[API] Query: What is the capital of Japan?...
+INFO:     127.0.0.1:56682 - "POST /api/query HTTP/1.1" 200 OK
+[API] Query: What is my favorite color?...
+INFO:     127.0.0.1:56688 - "POST /api/query HTTP/1.1" 200 OK
+Both `max_new_tokens` (=256) and `max_length`(=100) seem to have been set. `max_new_tokens` will take precedence. Please refer to the documentation for more information. (https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)
+[API] Query: What is the population of Germany?...
+INFO:     127.0.0.1:56690 - "POST /api/query HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [592528]
