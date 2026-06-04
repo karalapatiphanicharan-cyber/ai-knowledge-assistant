@@ -88,7 +88,9 @@ def add_vectors(embeddings: np.ndarray, metadata: list[dict]) -> int:
             if _index is None:
                 _index = faiss.IndexFlatL2(DIMENSION)
 
-            _index.add(embeddings.astype("float32"))
+            vectors = embeddings.astype("float32")
+            faiss.normalize_L2(vectors)
+            _index.add(vectors)
             _chunks.extend(metadata)
             _save_to_disk()
             return _index.ntotal
@@ -112,7 +114,9 @@ def search(query_embedding: np.ndarray, top_k: int = 5) -> list[dict]:
                 return []
 
             k = min(top_k, _index.ntotal)
-            distances, indices = _index.search(query_embedding.astype("float32").reshape(1, -1), k)
+            query = query_embedding.astype("float32").reshape(1, -1)
+            faiss.normalize_L2(query)
+            distances, indices = _index.search(query, k)
 
             results = []
             for dist, idx in zip(distances[0], indices[0]):
@@ -124,6 +128,7 @@ def search(query_embedding: np.ndarray, top_k: int = 5) -> list[dict]:
                     "index": _chunks[idx].get("index", 0),
                     "chunk_id": _chunks[idx].get("chunk_id"),
                     "score": round(float(dist), 4),
+                    "similarity_score": round(max(0.0, min(1.0, 1.0 - (float(dist) / 2.0))), 4),
                 })
             return results
         except Exception as e:
@@ -148,7 +153,9 @@ def _rebuild_index_from_chunks():
     _index = faiss.IndexFlatL2(DIMENSION)
     vectors = [chunk.get("embedding") for chunk in _chunks if chunk.get("embedding") is not None]
     if vectors:
-        _index.add(np.array(vectors, dtype="float32"))
+        matrix = np.array(vectors, dtype="float32")
+        faiss.normalize_L2(matrix)
+        _index.add(matrix)
 
 def delete_source(source: str, persist: bool = True) -> bool:
     """Remove every chunk belonging to a source document."""

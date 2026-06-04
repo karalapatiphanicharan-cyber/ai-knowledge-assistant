@@ -16,10 +16,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
-SIMILARITY_THRESHOLD = 1.45
-NOT_FOUND = "Information not found in uploaded documents."
+CHUNK_SIZE = 700
+CHUNK_OVERLAP = 125
+TOP_K = 5
+MIN_RELEVANCE_SCORE = 0.22
+NOT_FOUND = "The uploaded documents do not contain information about that."
 SUMMARY_PATTERNS = (
     "summarize this pdf",
     "summarize this document",
@@ -74,7 +75,7 @@ def ingest_document(text: str, source: str = "unknown") -> int:
     logger.info(f"[RAG] Ingestion completed in {time.time() - start_time:.2f}s")
     return len(chunks)
 
-def query_knowledge_base(question: str, top_k: int = 8) -> dict:
+def query_knowledge_base(question: str, top_k: int = TOP_K) -> dict:
     """
     Query the knowledge base with strict similarity filtering and ranking.
     """
@@ -87,7 +88,7 @@ def query_knowledge_base(question: str, top_k: int = 8) -> dict:
             return intelligence_answer
 
         query_embedding = generate_single_embedding(question)
-        results = search(query_embedding, top_k=top_k)
+        results = search(query_embedding, top_k=max(top_k * 4, 12))
 
         if not results:
             logger.info("[RAG] No results found in index.")
@@ -96,19 +97,18 @@ def query_knowledge_base(question: str, top_k: int = 8) -> dict:
                 "sources": []
             }
 
-        results = _rerank_results(question, results)
+        results = _dedupe_results(_rerank_results(question, results))
 
-        # 1. Similarity Filtering & Logging
         filtered_results = []
-        best_score = results[0]["score"] if results else SIMILARITY_THRESHOLD
-        adaptive_threshold = max(SIMILARITY_THRESHOLD, best_score + 0.45)
+        best_relevance = results[0]["relevance_score"] if results else 0.0
+        adaptive_floor = max(MIN_RELEVANCE_SCORE, best_relevance - 0.18)
         for r in results:
-            score = r["score"]
-            if score <= adaptive_threshold:
+            relevance = r["relevance_score"]
+            if relevance >= adaptive_floor:
                 filtered_results.append(r)
-                logger.info(f"[RAG] Selected chunk (score: {score:.4f}) from {r['source']}")
+                logger.info(f"[RAG] Selected chunk (relevance: {relevance:.4f}) from {r['source']}")
             else:
-                logger.info(f"[RAG] Filtered out chunk (score: {score:.4f}) from {r['source']}")
+                logger.info(f"[RAG] Filtered chunk (relevance: {relevance:.4f}) from {r['source']}")
 
         if not filtered_results:
             logger.info("[RAG] All chunks filtered out by threshold.")
@@ -117,31 +117,27 @@ def query_knowledge_base(question: str, top_k: int = 8) -> dict:
                 "sources": []
             }
 
-        # 2. Ranking & Deduplication
-        filtered_results.sort(key=lambda x: x["score"])
-
-        unique_chunks = []
-        seen = set()
+        unique_chunks = filtered_results[:top_k]
         sources = []
-
-        for r in filtered_results:
-            if r["content"] not in seen:
-                unique_chunks.append(r)
-                seen.add(r["content"])
 
         for r in unique_chunks:
             snippet = r["content"][:180].replace('\n', ' ').strip()
+            source_chunk_count = len(get_source_chunks(r["source"]))
             sources.append({
                 "filename": r["source"],
                 "file": r["source"],
                 "chunk_id": r.get("chunk_id") or f"{r['source']}#{r.get('index', 0) + 1}",
-                "confidence_score": _confidence_from_distance(r["score"]),
+                "chunk_index": r.get("index", 0),
+                "chunk_count": source_chunk_count,
+                "retrieved_chunk_count": len(unique_chunks),
+                "similarity_score": round(r["relevance_score"], 4),
+                "confidence_score": round(r["relevance_score"], 2),
                 "snippet": snippet + ("..." if len(r["content"]) > 180 else ""),
             })
 
         # Build context
         context = "\n\n---\n\n".join(
-            f"[{r.get('chunk_id') or r['source']}]\n{r['content']}" for r in unique_chunks[:top_k]
+            f"[{r.get('chunk_id') or r['source']}]\n{r['content']}" for r in unique_chunks
         )
         context = context[:5000]
 
@@ -161,13 +157,12 @@ def query_knowledge_base(question: str, top_k: int = 8) -> dict:
             "sources": []
         }
 
-def _confidence_from_distance(score: float) -> float:
-    """Convert L2 distance into a compact 0..1 confidence score."""
-    confidence = max(0.0, min(1.0, 1.0 - (score / SIMILARITY_THRESHOLD)))
-    return round(confidence, 2)
-
 def _chunk_text(text: str) -> list[str]:
     """Paragraph-aware chunking that avoids splitting sentences when possible."""
+    page_chunks = _chunk_marked_pages(text)
+    if page_chunks:
+        return page_chunks
+
     blocks = [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]
     chunks = []
     current = ""
@@ -188,13 +183,45 @@ def _chunk_text(text: str) -> list[str]:
             if len(candidate) <= CHUNK_SIZE:
                 current = candidate
             else:
-                chunks.append(unit[:CHUNK_SIZE].strip())
-                current = _overlap_tail(unit[:CHUNK_SIZE]) + unit[CHUNK_SIZE:].strip()
+                for piece in _sliding_window(unit):
+                    chunks.append(piece)
+                current = ""
 
     if current.strip():
         chunks.append(current.strip())
 
     return [chunk for chunk in chunks if chunk]
+
+def _chunk_marked_pages(text: str) -> list[str]:
+    matches = list(re.finditer(r"(?m)^\[Page \d+\]", text))
+    if not matches:
+        return []
+
+    chunks = []
+    for index, match in enumerate(matches):
+        start = match.start()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        page_text = text[start:end].strip()
+        if not page_text:
+            continue
+        if len(page_text) <= CHUNK_SIZE:
+            chunks.append(page_text)
+        else:
+            chunks.extend(_sliding_window(page_text))
+    return chunks
+
+def _sliding_window(text: str) -> list[str]:
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = min(start + CHUNK_SIZE, len(text))
+        piece = text[start:end].strip()
+        if piece:
+            chunks.append(piece)
+        if end >= len(text):
+            break
+        start = max(end - CHUNK_OVERLAP, start + 1)
+    return chunks
 
 def _split_oversized_block(block: str) -> list[str]:
     if len(block) <= CHUNK_SIZE:
@@ -229,17 +256,40 @@ def _overlap_tail(text: str) -> str:
 
 def _rerank_results(question: str, results: list[dict]) -> list[dict]:
     query_terms = _important_terms(question)
+    phrase_boosts = re.findall(r"\b(?:page|section|chapter)\s+\d+\b", question.lower())
 
     def rank_key(result: dict):
         content_terms = _important_terms(result["content"])
         lexical_overlap = len(query_terms & content_terms)
+        lexical_ratio = lexical_overlap / max(len(query_terms), 1)
+        lower_content = result["content"].lower()
         heading_bonus = 0
-        first_line = result["content"].splitlines()[0].lower() if result["content"] else ""
+        phrase_bonus = 0
+        first_line = lower_content.splitlines()[0] if result["content"] else ""
         if any(term in first_line for term in query_terms):
-            heading_bonus = 1
-        return (-lexical_overlap - heading_bonus, result["score"])
+            heading_bonus = 0.08
+        if any(re.search(rf"\b{re.escape(phrase)}\b", lower_content) for phrase in phrase_boosts):
+            phrase_bonus = 0.18
+        vector_score = result.get("similarity_score")
+        if vector_score is None:
+            vector_score = max(0.0, 1.0 - (result["score"] / 2.0))
+        combined_score = (0.72 * vector_score) + (0.28 * lexical_ratio) + heading_bonus + phrase_bonus
+        result["relevance_score"] = round(max(0.0, min(1.0, combined_score)), 4)
+        return (-result["relevance_score"], -lexical_overlap, result["score"])
 
     return sorted(results, key=rank_key)
+
+def _dedupe_results(results: list[dict]) -> list[dict]:
+    unique = []
+    seen = set()
+    for result in results:
+        normalized = re.sub(r"\s+", " ", result["content"].lower()).strip()
+        fingerprint = normalized[:500]
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        unique.append(result)
+    return unique
 
 def _important_terms(text: str) -> set[str]:
     stop_words = {
@@ -249,7 +299,7 @@ def _important_terms(text: str) -> set[str]:
         "what", "summarize", "summary", "overview", "explain", "section",
     }
     return {
-        word for word in re.findall(r"\b[a-zA-Z][a-zA-Z0-9-]{2,}\b", text.lower())
+        word for word in re.findall(r"\b[a-zA-Z0-9][a-zA-Z0-9-]{1,}\b", text.lower())
         if word not in stop_words
     }
 

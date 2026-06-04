@@ -40,10 +40,10 @@ def _extract_pdf(file_bytes: bytes) -> str:
     """Extract text from a PDF file."""
     reader = PdfReader(io.BytesIO(file_bytes))
     pages = []
-    for page in reader.pages:
+    for page_number, page in enumerate(reader.pages, start=1):
         text = page.extract_text()
         if text:
-            pages.append(text)
+            pages.append(f"[Page {page_number}]\n{text}")
     return "\n\n".join(pages)
 
 
